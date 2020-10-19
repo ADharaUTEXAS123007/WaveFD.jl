@@ -340,8 +340,8 @@ __attribute__((target_clones("avx","avx2","avx512f","default")))
                         const long k = kx * _nz + kz;
                         const float V = _v[k];
                         const float B = _b[k];
-                        dmodel[k] += (2 * B * real(tmp_nlfup[kz]) * real(tmp_adjup[kz])) / pow(V, 3.0f) / nz;
-                        dmodel[k] += (2 * B * real(tmp_nlfdn[kz]) * real(tmp_adjdn[kz])) / pow(V, 3.0f) / nz;
+//                        dmodel[k] += (2 * B * real(tmp_nlfup[kz]) * real(tmp_adjup[kz])) / pow(V, 3.0f) / _nz;
+                        dmodel[k] += (2 * B * real(tmp_nlfdn[kz]) * real(tmp_adjdn[kz])) / pow(V, 3.0f) / _nz;
                     }
                 }
             }
