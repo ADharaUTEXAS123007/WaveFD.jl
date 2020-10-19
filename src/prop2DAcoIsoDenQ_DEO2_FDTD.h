@@ -265,6 +265,8 @@ __attribute__((target_clones("avx","avx2","avx512f","default")))
 
     inline void adjointBornAccumulation_wavefieldsep(float *dmodel, float *wavefieldDP) {
         const long nfft = 2 * _nz;
+        const float scale = 1.0f / (float)(nfft);
+
         std::complex<float> *tmp = new std::complex<float>[nfft];
 
         fftwf_plan planForward = fftwf_plan_dft_1d(nfft,
@@ -274,6 +276,7 @@ __attribute__((target_clones("avx","avx2","avx512f","default")))
 		fftwf_plan planInverse = fftwf_plan_dft_1d(nfft,
 		    reinterpret_cast<fftwf_complex*>(tmp),
 		    reinterpret_cast<fftwf_complex*>(tmp), -1, FFTW_ESTIMATE);
+
         delete [] tmp;
 
 #pragma omp parallel num_threads(_nthread)
@@ -290,7 +293,6 @@ __attribute__((target_clones("avx","avx2","avx512f","default")))
 
     #pragma omp simd
                     for (long kz = 0; kz < nfft; kz++) {
-                        const long k = kx * _nz + kz;
                         tmp_nlfup[kz] = 0;
                         tmp_adjup[kz] = 0;
                         tmp_nlfdn[kz] = 0;
@@ -299,9 +301,8 @@ __attribute__((target_clones("avx","avx2","avx512f","default")))
 
     #pragma omp simd
                     for (long kz = 0; kz < _nz; kz++) {
-                        const long k = kx * _nz + kz;
-                        tmp_nlfup[kz] = wavefieldDP[k];
-                        tmp_adjup[kz] = _pOld[k];
+                        tmp_nlfup[kz] = scale * wavefieldDP[kx * _nz + kz];
+                        tmp_adjup[kz] = scale *  _pOld[kx * _nz + kz];
                     }  
 
                     fftwf_execute_dft(planForward,
@@ -311,6 +312,7 @@ __attribute__((target_clones("avx","avx2","avx512f","default")))
                         reinterpret_cast<fftwf_complex*>(tmp_adjup),
                         reinterpret_cast<fftwf_complex*>(tmp_adjup));
 
+                    // copy values at Nyquist
                     tmp_nlfdn[nfft / 2] = tmp_nlfup[nfft / 2];
                     tmp_adjdn[nfft / 2] = tmp_adjup[nfft / 2];
 
@@ -340,8 +342,8 @@ __attribute__((target_clones("avx","avx2","avx512f","default")))
                         const long k = kx * _nz + kz;
                         const float V = _v[k];
                         const float B = _b[k];
-//                        dmodel[k] += (2 * B * real(tmp_nlfup[kz]) * real(tmp_adjup[kz])) / pow(V, 3.0f) / _nz;
-                        dmodel[k] += (2 * B * real(tmp_nlfdn[kz]) * real(tmp_adjdn[kz])) / pow(V, 3.0f) / _nz;
+                        dmodel[k] += (2 * B * real(tmp_nlfup[kz]) * real(tmp_adjup[kz])) / pow(V, 3.0f);
+                        dmodel[k] += (2 * B * real(tmp_nlfdn[kz]) * real(tmp_adjdn[kz])) / pow(V, 3.0f);
                     }
                 }
             }
