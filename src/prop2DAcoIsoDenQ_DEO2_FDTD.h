@@ -6,6 +6,8 @@
 #include <stdlib.h>
 #include <stdio.h>
 #include <math.h>
+#include <fftw3.h>
+#include <complex>
 
 #define MIN(x,y) ((x)<(y)?(x):(y))
 
@@ -255,6 +257,91 @@ __attribute__((target_clones("avx","avx2","avx512f","default")))
                         const float V = _v[k];
                         const float B = _b[k];
                         dmodel[k] += (2 * B * wavefieldDP[k] * _pOld[k]) / pow(V, 3.0f);
+                    }
+                }
+            }
+        }
+    }
+
+    inline void adjointBornAccumulation_wavefieldsep(float *dmodel, float *wavefieldDP) {
+        const long nfft = 2 * _nz;
+        std::complex<float> *tmp = new std::complex<float>[nfft];
+
+        fftwf_plan planForward = fftwf_plan_dft_1d(nfft,
+		    reinterpret_cast<fftwf_complex*>(tmp),
+		    reinterpret_cast<fftwf_complex*>(tmp), +1, FFTW_ESTIMATE);
+
+		fftwf_plan planInverse = fftwf_plan_dft_1d(nfft,
+		    reinterpret_cast<fftwf_complex*>(tmp),
+		    reinterpret_cast<fftwf_complex*>(tmp), -1, FFTW_ESTIMATE);
+        delete [] tmp;
+
+#pragma omp parallel num_threads(_nthread)
+        {
+            std::complex<float> *tmp_nlfup = new std::complex<float>[nfft];
+            std::complex<float> *tmp_nlfdn = new std::complex<float>[nfft];
+            std::complex<float> *tmp_adjup = new std::complex<float>[nfft];
+            std::complex<float> *tmp_adjdn = new std::complex<float>[nfft];
+
+#pragma omp for schedule(static,1)
+            for (long bx = 0; bx < _nx; bx += _nbx) {
+                const long kxmax = MIN(bx + _nbx, _nx);
+                for (long kx = bx; kx < kxmax; kx++) {
+
+    #pragma omp simd
+                    for (long kz = 0; kz < nfft; kz++) {
+                        const long k = kx * _nz + kz;
+                        tmp_nlfup[kz] = 0;
+                        tmp_adjup[kz] = 0;
+                        tmp_nlfdn[kz] = 0;
+                        tmp_adjdn[kz] = 0;
+                    }  
+
+    #pragma omp simd
+                    for (long kz = 0; kz < _nz; kz++) {
+                        const long k = kx * _nz + kz;
+                        tmp_nlfup[kz] = wavefieldDP[k];
+                        tmp_adjup[kz] = _pOld[k];
+                    }  
+
+                    fftwf_execute_dft(planForward,
+                        reinterpret_cast<fftwf_complex*>(tmp_nlfup),
+                        reinterpret_cast<fftwf_complex*>(tmp_nlfup));
+                    fftwf_execute_dft(planForward,
+                        reinterpret_cast<fftwf_complex*>(tmp_adjup),
+                        reinterpret_cast<fftwf_complex*>(tmp_adjup));
+
+                    tmp_nlfdn[nfft / 2] = tmp_nlfup[nfft / 2];
+                    tmp_adjdn[nfft / 2] = tmp_adjup[nfft / 2];
+
+        #pragma omp simd
+                    for (long kfft = 0; kfft < nfft / 2; kfft++) {
+                        tmp_nlfdn[kfft] = tmp_nlfup[kfft];
+                        tmp_adjdn[kfft] = tmp_adjup[kfft];
+                        tmp_nlfup[kfft] = 0;
+                        tmp_adjup[kfft] = 0;
+                    }
+
+                    fftwf_execute_dft(planInverse,
+                        reinterpret_cast<fftwf_complex*>(tmp_nlfup),
+                        reinterpret_cast<fftwf_complex*>(tmp_nlfup));
+                    fftwf_execute_dft(planInverse,
+                        reinterpret_cast<fftwf_complex*>(tmp_adjup),
+                        reinterpret_cast<fftwf_complex*>(tmp_adjup));
+                    fftwf_execute_dft(planInverse,
+                        reinterpret_cast<fftwf_complex*>(tmp_nlfdn),
+                        reinterpret_cast<fftwf_complex*>(tmp_nlfdn));
+                    fftwf_execute_dft(planInverse,
+                        reinterpret_cast<fftwf_complex*>(tmp_adjdn),
+                        reinterpret_cast<fftwf_complex*>(tmp_adjdn));
+
+        #pragma omp simd
+                    for (long kz = 0; kz < _nz; kz++) {
+                        const long k = kx * _nz + kz;
+                        const float V = _v[k];
+                        const float B = _b[k];
+                        dmodel[k] += (2 * B * real(tmp_nlfup[kz]) * real(tmp_adjup[kz])) / pow(V, 3.0f) / nz;
+                        dmodel[k] += (2 * B * real(tmp_nlfdn[kz]) * real(tmp_adjdn[kz])) / pow(V, 3.0f) / nz;
                     }
                 }
             }
