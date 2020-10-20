@@ -346,8 +346,13 @@ __attribute__((target_clones("avx","avx2","avx512f","default")))
                         dmodel[k] += (2 * B * real(tmp_nlfdn[kz]) * real(tmp_adjdn[kz])) / pow(V, 3.0f);
                     }
                 }
-            }
-        }
+            } // end loop over traces
+
+            delete [] tmp_nlfup;
+            delete [] tmp_nlfdn;
+            delete [] tmp_adjup;
+            delete [] tmp_adjdn;
+        } // end parallel region
     }
 
 template<class Type>
