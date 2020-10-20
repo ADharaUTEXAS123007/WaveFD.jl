@@ -292,46 +292,36 @@ __attribute__((target_clones("avx","avx2","avx512f","default")))
                 for (long kx = bx; kx < kxmax; kx++) {
 
     #pragma omp simd
-                    for (long kz = 0; kz < nfft; kz++) {
-                        tmp_nlfup[kz] = 0;
-                        tmp_adjup[kz] = 0;
-                        tmp_nlfdn[kz] = 0;
-                        tmp_adjdn[kz] = 0;
+                    for (long kfft = 0; kfft < nfft; kfft++) {
+                        tmp_nlfup[kfft] = 0;
+                        tmp_adjup[kfft] = 0;
+                        tmp_nlfdn[kfft] = 0;
+                        tmp_adjdn[kfft] = 0;
                     }  
 
     #pragma omp simd
                     for (long kz = 0; kz < _nz; kz++) {
                         tmp_nlfup[kz] = scale * wavefieldDP[kx * _nz + kz];
-                        tmp_adjup[kz] = scale *  _pOld[kx * _nz + kz];
+                        tmp_adjup[kz] = scale * _pOld[kx * _nz + kz];
                     }  
 
                     fftwf_execute_dft(planForward,
                         reinterpret_cast<fftwf_complex*>(tmp_nlfup),
                         reinterpret_cast<fftwf_complex*>(tmp_nlfup));
+
                     fftwf_execute_dft(planForward,
                         reinterpret_cast<fftwf_complex*>(tmp_adjup),
                         reinterpret_cast<fftwf_complex*>(tmp_adjup));
 
-                    // copy values at Nyquist
-                    // tmp_nlfdn[nfft / 2] = tmp_nlfup[nfft / 2];
-                    // tmp_adjdn[nfft / 2] = tmp_adjup[nfft / 2];
+                    tmp_nlfdn[nfft / 2] = tmp_nlfup[nfft / 2];
+                    tmp_adjdn[nfft / 2] = tmp_adjup[nfft / 2];
 
         #pragma omp simd
-                    for (long kfft = 0; kfft < nfft; kfft++) {
+                    for (long kfft = nfft / 2 + 1; kfft < nfft; kfft++) {
                         tmp_nlfdn[kfft] = tmp_nlfup[kfft];
                         tmp_adjdn[kfft] = tmp_adjup[kfft];
-                    }
-
-        #pragma omp simd
-                    for (long kfft = 0; kfft < nfft / 2; kfft++) {
                         tmp_nlfup[kfft] = 0;
                         tmp_adjup[kfft] = 0;
-                    }
-
-        #pragma omp simd
-                    for (long kfft = nfft /2 + 1; kfft < nfft; kfft++) {
-                        tmp_nlfdn[kfft] = 0;
-                        tmp_adjdn[kfft] = 0;
                     }
 
                     fftwf_execute_dft(planInverse,
@@ -355,10 +345,10 @@ __attribute__((target_clones("avx","avx2","avx512f","default")))
                         const long k = kx * _nz + kz;
                         const float V = _v[k];
                         const float B = _b[k];
-                        // dmodel[k] += (2 * B * real(tmp_nlfup[kz]) * real(tmp_adjup[kz])) / pow(V, 3.0f);
-                        // dmodel[k] += (2 * B * real(tmp_nlfdn[kz]) * real(tmp_adjdn[kz])) / pow(V, 3.0f);
-                        dmodel[k] += (2 * B * real(tmp_nlfup[kz]) * real(tmp_adjdn[kz])) / pow(V, 3.0f);
-                        dmodel[k] += (2 * B * real(tmp_nlfdn[kz]) * real(tmp_adjup[kz])) / pow(V, 3.0f);
+                        dmodel[k] += (2 * B * real(conj(tmp_nlfup[kz]) * tmp_adjup[kz])) / pow(V, 3.0f);
+                        dmodel[k] += (2 * B * real(conj(tmp_nlfdn[kz]) * tmp_adjdn[kz])) / pow(V, 3.0f);
+                        // dmodel[k] += (2 * B * real(conj(tmp_nlfup[kz]) * tmp_adjdn[kz])) / pow(V, 3.0f);
+                        // dmodel[k] += (2 * B * real(conj(tmp_nlfdn[kz]) * tmp_adjup[kz])) / pow(V, 3.0f);
                     }
                 }
             } // end loop over traces
