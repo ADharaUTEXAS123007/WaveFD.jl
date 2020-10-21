@@ -279,15 +279,9 @@ __attribute__((target_clones("avx","avx2","avx512f","default")))
 
         delete [] tmp;
 
-        const long ntap = - 1;
-        // const long ntap = (long) (0.05 * nfft) + 1;
-        // const long ntap = (long) (0.10 * nfft) + 1;
-
 #pragma omp parallel num_threads(_nthread)
         {
             std::complex<float> *tmp_nlfup = new std::complex<float>[nfft];
-            std::complex<float> *tmp_nlfdn = new std::complex<float>[nfft];
-            std::complex<float> *tmp_adjup = new std::complex<float>[nfft];
             std::complex<float> *tmp_adjdn = new std::complex<float>[nfft];
 
 #pragma omp for schedule(static,1)
@@ -298,15 +292,13 @@ __attribute__((target_clones("avx","avx2","avx512f","default")))
     #pragma omp simd
                     for (long kfft = 0; kfft < nfft; kfft++) {
                         tmp_nlfup[kfft] = 0;
-                        tmp_adjup[kfft] = 0;
-                        tmp_nlfdn[kfft] = 0;
                         tmp_adjdn[kfft] = 0;
                     }  
 
     #pragma omp simd
                     for (long kz = 0; kz < _nz; kz++) {
                         tmp_nlfup[kz] = scale * wavefieldDP[kx * _nz + kz];
-                        tmp_adjup[kz] = scale * _pOld[kx * _nz + kz];
+                        tmp_adjdn[kz] = scale * _pOld[kx * _nz + kz];
                     }  
 
                     fftwf_execute_dft(planForward,
@@ -314,66 +306,26 @@ __attribute__((target_clones("avx","avx2","avx512f","default")))
                         reinterpret_cast<fftwf_complex*>(tmp_nlfup));
 
                     fftwf_execute_dft(planForward,
-                        reinterpret_cast<fftwf_complex*>(tmp_adjup),
-                        reinterpret_cast<fftwf_complex*>(tmp_adjup));
+                        reinterpret_cast<fftwf_complex*>(tmp_adjdn),
+                        reinterpret_cast<fftwf_complex*>(tmp_adjdn));
 
+                    // upgoing is negative frequencies, [-Nyquist,0]
+                    // zero the positive frequencies, excluding Nyquist
         #pragma omp simd
-                    for (long kfft = 0; kfft < nfft; kfft++) {
-                        tmp_nlfdn[kfft] = tmp_nlfup[kfft];
-                        tmp_adjdn[kfft] = tmp_adjup[kfft];
+                    for (long kfft = 0; kfft < nfft / 2; kfft++) {
+                        tmp_nlfup[kfft] = 0;
                     }
 
-        #pragma omp simd
-                    for (long kfft = 0; kfft < nfft / 2 + 1; kfft++) {
-                        if (kfft < ntap) {
-                            double d = (double) (kfft) / (double) (ntap - 1);
-                            double a = d * M_PI / 2;
-                            double w = cos(a);
-                            tmp_nlfup[kfft] *= w;
-                            tmp_adjup[kfft] *= w;
-                            // if (kx == 0) printf("UP kfft,nfft,ntap,w; %5ld %5ld %5ld %+12.6f\n", kfft, nfft, ntap, w);
-                        } else {
-                            tmp_nlfup[kfft] = 0;
-                            tmp_adjup[kfft] = 0;
-                        }
-                    }
-
+                    // dngoing is positive frequencies, [0,+Nyquist]
+                    // zero the negative frequencies, excluding Nyquist
         #pragma omp simd
                     for (long kfft = nfft / 2 + 1; kfft < nfft; kfft++) {
-                        tmp_nlfup[kfft] = 0;
-                        tmp_adjup[kfft] = 0;
-                        if (nfft - 1 - kfft < ntap) {
-                            double d = (double) (nfft - 1 - kfft) / (double) (ntap - 1);
-                            double a = d * M_PI / 2;
-                            double w = 1 - cos(a);
-                            tmp_nlfup[kfft] *= w;
-                            tmp_adjup[kfft] *= w;
-                            // if (kx == 0) printf("DN kfft,nfft,ntap,w; %5ld %5ld %5ld %+12.6f\n", kfft, nfft, ntap, w);
-                        } else {
-                            tmp_nlfup[kfft] = 0;
-                            tmp_adjup[kfft] = 0;
-                        }
-                    }
-
-        #pragma omp simd
-                    for (long kfft = nfft / 2 + 1; kfft < nfft; kfft++) {
-                        tmp_nlfdn[kfft] = tmp_nlfup[kfft];
-                        tmp_adjdn[kfft] = tmp_adjup[kfft];
-                        tmp_nlfup[kfft] = 0;
-                        tmp_adjup[kfft] = 0;
+                        tmp_adjdn[kfft] = 0;
                     }
 
                     fftwf_execute_dft(planInverse,
                         reinterpret_cast<fftwf_complex*>(tmp_nlfup),
                         reinterpret_cast<fftwf_complex*>(tmp_nlfup));
-
-                    fftwf_execute_dft(planInverse,
-                        reinterpret_cast<fftwf_complex*>(tmp_nlfdn),
-                        reinterpret_cast<fftwf_complex*>(tmp_nlfdn));
-
-                    fftwf_execute_dft(planInverse,
-                        reinterpret_cast<fftwf_complex*>(tmp_adjup),
-                        reinterpret_cast<fftwf_complex*>(tmp_adjup));
 
                     fftwf_execute_dft(planInverse,
                         reinterpret_cast<fftwf_complex*>(tmp_adjdn),
@@ -384,17 +336,14 @@ __attribute__((target_clones("avx","avx2","avx512f","default")))
                         const long k = kx * _nz + kz;
                         const float V = _v[k];
                         const float B = _b[k];
-                        dmodel[k] += (2 * B * real(conj(tmp_nlfup[kz]) * tmp_adjup[kz])) / pow(V, 3.0f);
-                        dmodel[k] += (2 * B * real(conj(tmp_nlfdn[kz]) * tmp_adjdn[kz])) / pow(V, 3.0f);
-                        // dmodel[k] += (2 * B * real(conj(tmp_nlfup[kz]) * tmp_adjdn[kz])) / pow(V, 3.0f);
-                        // dmodel[k] += (2 * B * real(conj(tmp_nlfdn[kz]) * tmp_adjup[kz])) / pow(V, 3.0f);
+                        
+                        // Faqi eq 10, as applied to FWI instead of RTM
+                        dmodel[k] += real(2 * B * tmp_nlfup[kz] * tmp_adjdn[kz] / pow(V, 3.0f));
                     }
                 }
             } // end loop over traces
 
             delete [] tmp_nlfup;
-            delete [] tmp_nlfdn;
-            delete [] tmp_adjup;
             delete [] tmp_adjdn;
         } // end parallel region
 
