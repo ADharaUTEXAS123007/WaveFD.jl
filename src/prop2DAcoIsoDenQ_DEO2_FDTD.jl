@@ -90,34 +90,38 @@ function adjointBornAccumulation!(prop::Prop2DAcoIsoDenQ_DEO2_FDTD,imagingcondit
     scale = 1 / (float)(nfft)
     _B = B(prop)
     _V = V(prop)
+    _POld = POld(prop)
 
-    tmp_nlfup = Array{ComplexF32}(undef,nfft)
-    tmp_nlfdn = Array{ComplexF32}(undef,nfft)
-    tmp_adjup = Array{ComplexF32}(undef,nfft)
-    tmp_adjdn = Array{ComplexF32}(undef,nfft)
-    for kx in 1:nx
-        tmp_nlfup.=0
-        tmp_nlfdn.=0
-        tmp_adjup.=0
-        tmp_adjdn.=0 
-        
-        tmp_nlfup[1:nz] .= scale .* wavefieldp[:,kx]
-        tmp_adjup[1:nz] .= scale .* POld(prop)[:,kx]
+    tmp_nlfup = zeros(ComplexF32,nfft,nx)
+    tmp_nlfdn = zeros(ComplexF32,nfft,nx)
+    tmp_adjup = zeros(ComplexF32,nfft,nx)
+    tmp_adjdn = zeros(ComplexF32,nfft,nx)
 
-        fft!(tmp_nlfup)
-        fft!(tmp_adjup)
-        tmp_nlfdn[nfft2:end].=tmp_nlfup[nfft2:end]
-        tmp_adjdn[nfft2:end].=tmp_adjup[nfft2:end]
-        tmp_nlfup[nfft2+1:end].=0
-        tmp_adjup[nfft2+1:end].=0
+    # tmp_nlfup[1:nz,:] .= scale .* wavefieldp
+    # tmp_adjup[1:nz,:] .= scale .* _POld
 
-        ifft!(tmp_nlfdn)
-        ifft!(tmp_adjdn)
-        ifft!(tmp_nlfup)
-        ifft!(tmp_adjup)
+    tmp_nlfup[1:nz,:] .= wavefieldp
+    tmp_adjup[1:nz,:] .= _POld
 
-        @views @. dmodelv[:,kx] = (2 * _B[:,kx] * (real(conj(tmp_nlfup[1:nz]) * tmp_adjup[1:nz])) + real(conj(tmp_nlfdn[1:nz]) * tmp_adjdn[1:nz]))/ _V[:,kx]^3
-    end
+    FFTW.set_num_threads(Sys.CPU_THREADS)
+    plan_fft_forward = plan_fft!(tmp_nlfup, 1;flags=FFTW.MEASURE)
+
+    mul!(tmp_nlfup, plan_fft_forward, tmp_nlfup)
+    mul!(tmp_adjup, plan_fft_forward, tmp_adjup)
+
+    tmp_nlfdn[nfft2:end,:] .= tmp_nlfup[nfft2:end,:]
+    tmp_adjdn[nfft2:end,:] .= tmp_adjup[nfft2:end,:]
+
+    tmp_nlfup[nfft2+1:end,:] .= 0
+    tmp_adjup[nfft2+1:end,:] .= 0
+
+    ldiv!(tmp_nlfdn, plan_fft_forward, tmp_nlfdn)
+    ldiv!(tmp_adjdn, plan_fft_forward, tmp_adjdn)
+    ldiv!(tmp_nlfup, plan_fft_forward, tmp_nlfup)
+    ldiv!(tmp_adjup, plan_fft_forward, tmp_adjup)
+    
+    @views @. dmodelv = (real(conj(tmp_nlfup[1:nz,:]) * tmp_adjup[1:nz,:]) + real(conj(tmp_nlfdn[1:nz,:]) * tmp_adjdn[1:nz,:])) * (2*_B/_V^3)
+    nothing
 end
 
 function show(io::IO, prop::Prop2DAcoIsoDenQ_DEO2_FDTD)
