@@ -279,9 +279,9 @@ __attribute__((target_clones("avx","avx2","avx512f","default")))
 
         delete [] tmp;
 
-        const long ntap = (long) (0.05 * nfft) + 1;
+        const long ntap = - 1;
+        // const long ntap = (long) (0.05 * nfft) + 1;
         // const long ntap = (long) (0.10 * nfft) + 1;
-        // const long ntap = - 1;
 
 #pragma omp parallel num_threads(_nthread)
         {
