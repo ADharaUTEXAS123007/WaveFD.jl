@@ -279,6 +279,10 @@ __attribute__((target_clones("avx","avx2","avx512f","default")))
 
         delete [] tmp;
 
+        const long ntap = (long) (0.05 * nfft) + 1;
+        // const long ntap = (long) (0.10 * nfft) + 1;
+        // const long ntap = - 1;
+
 #pragma omp parallel num_threads(_nthread)
         {
             std::complex<float> *tmp_nlfup = new std::complex<float>[nfft];
@@ -313,8 +317,43 @@ __attribute__((target_clones("avx","avx2","avx512f","default")))
                         reinterpret_cast<fftwf_complex*>(tmp_adjup),
                         reinterpret_cast<fftwf_complex*>(tmp_adjup));
 
-                    tmp_nlfdn[nfft / 2] = tmp_nlfup[nfft / 2];
-                    tmp_adjdn[nfft / 2] = tmp_adjup[nfft / 2];
+        #pragma omp simd
+                    for (long kfft = 0; kfft < nfft; kfft++) {
+                        tmp_nlfdn[kfft] = tmp_nlfup[kfft];
+                        tmp_adjdn[kfft] = tmp_adjup[kfft];
+                    }
+
+        #pragma omp simd
+                    for (long kfft = 0; kfft < nfft / 2 + 1; kfft++) {
+                        if (kfft < ntap) {
+                            double d = (double) (kfft) / (double) (ntap - 1);
+                            double a = d * M_PI / 2;
+                            double w = cos(a);
+                            tmp_nlfup[kfft] *= w;
+                            tmp_adjup[kfft] *= w;
+                            // if (kx == 0) printf("UP kfft,nfft,ntap,w; %5ld %5ld %5ld %+12.6f\n", kfft, nfft, ntap, w);
+                        } else {
+                            tmp_nlfup[kfft] = 0;
+                            tmp_adjup[kfft] = 0;
+                        }
+                    }
+
+        #pragma omp simd
+                    for (long kfft = nfft / 2 + 1; kfft < nfft; kfft++) {
+                        tmp_nlfup[kfft] = 0;
+                        tmp_adjup[kfft] = 0;
+                        if (nfft - 1 - kfft < ntap) {
+                            double d = (double) (nfft - 1 - kfft) / (double) (ntap - 1);
+                            double a = d * M_PI / 2;
+                            double w = 1 - cos(a);
+                            tmp_nlfup[kfft] *= w;
+                            tmp_adjup[kfft] *= w;
+                            // if (kx == 0) printf("DN kfft,nfft,ntap,w; %5ld %5ld %5ld %+12.6f\n", kfft, nfft, ntap, w);
+                        } else {
+                            tmp_nlfup[kfft] = 0;
+                            tmp_adjup[kfft] = 0;
+                        }
+                    }
 
         #pragma omp simd
                     for (long kfft = nfft / 2 + 1; kfft < nfft; kfft++) {
