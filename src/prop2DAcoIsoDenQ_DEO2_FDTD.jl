@@ -74,12 +74,50 @@ function adjointBornAccumulation!(prop::Prop2DAcoIsoDenQ_DEO2_FDTD,imagingcondit
          prop.p,    dmodelv,    wavefieldp)
 end
 
-const wavefieldseparationlib=normpath(joinpath(Base.source_path(),"../libprop2DAcoIsoDenQ_DEO2_FDTD"))
+# const wavefieldseparationlib=normpath(joinpath(Base.source_path(),"../libprop2DAcoIsoDenQ_DEO2_FDTD"))
+# struct ImagingConditionWaveFieldSeparation <: ImagingCondition end
+# function adjointBornAccumulation!(prop::Prop2DAcoIsoDenQ_DEO2_FDTD,imagingcondition::ImagingConditionWaveFieldSeparation,dmodelv,wavefieldp)
+#     ccall((:Prop2DAcoIsoDenQ_DEO2_FDTD_AdjointBornAccumulation_wavefieldsep, wavefieldseparationlib), Cvoid,
+#         (Ptr{Cvoid},Ptr{Cfloat},Ptr{Cfloat}),
+#          prop.p,    dmodelv,    wavefieldp)
+# end
+
 struct ImagingConditionWaveFieldSeparation <: ImagingCondition end
 function adjointBornAccumulation!(prop::Prop2DAcoIsoDenQ_DEO2_FDTD,imagingcondition::ImagingConditionWaveFieldSeparation,dmodelv,wavefieldp)
-    ccall((:Prop2DAcoIsoDenQ_DEO2_FDTD_AdjointBornAccumulation_wavefieldsep, wavefieldseparationlib), Cvoid,
-        (Ptr{Cvoid},Ptr{Cfloat},Ptr{Cfloat}),
-         prop.p,    dmodelv,    wavefieldp)
+    nz,nx = size(prop)
+    nfft = 2 * nz
+    nfft2 = div(nfft,2)
+    scale = 1 / (float)(nfft)
+    _B = B(prop)
+    _V = V(prop)
+
+    tmp_nlfup = Array{ComplexF32}(undef,nfft)
+    tmp_nlfdn = Array{ComplexF32}(undef,nfft)
+    tmp_adjup = Array{ComplexF32}(undef,nfft)
+    tmp_adjdn = Array{ComplexF32}(undef,nfft)
+    for kx in 1:nx
+        tmp_nlfup.=0
+        tmp_nlfdn.=0
+        tmp_adjup.=0
+        tmp_adjdn.=0 
+        
+        tmp_nlfup[1:nz] .= scale .* wavefieldp[:,kx]
+        tmp_adjup[1:nz] .= scale .* POld(prop)[:,kx]
+
+        fft!(tmp_nlfup)
+        fft!(tmp_adjup)
+        tmp_nlfdn[nfft2:end].=tmp_nlfup[nfft2:end]
+        tmp_adjdn[nfft2:end].=tmp_adjup[nfft2:end]
+        tmp_nlfup[nfft2+1:end].=0
+        tmp_adjup[nfft2+1:end].=0
+
+        ifft!(tmp_nlfdn)
+        ifft!(tmp_adjdn)
+        ifft!(tmp_nlfup)
+        ifft!(tmp_adjup)
+
+        @views @. dmodelv[:,kx] = (2 * _B[:,kx] * (real(conj(tmp_nlfup[1:nz]) * tmp_adjup[1:nz])) + real(conj(tmp_nlfdn[1:nz]) * tmp_adjdn[1:nz]))/ _V[:,kx]^3
+    end
 end
 
 function show(io::IO, prop::Prop2DAcoIsoDenQ_DEO2_FDTD)
