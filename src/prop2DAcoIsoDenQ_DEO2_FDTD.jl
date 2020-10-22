@@ -74,55 +74,47 @@ function adjointBornAccumulation!(prop::Prop2DAcoIsoDenQ_DEO2_FDTD,imagingcondit
          prop.p,    dmodelv,    wavefieldp)
 end
 
-const wavefieldseparationlib=normpath(joinpath(Base.source_path(),"../libprop2DAcoIsoDenQ_DEO2_FDTD"))
-struct ImagingConditionWaveFieldSeparation <: ImagingCondition end
-function adjointBornAccumulation!(prop::Prop2DAcoIsoDenQ_DEO2_FDTD,imagingcondition::ImagingConditionWaveFieldSeparation,dmodelv,wavefieldp)
-    ccall((:Prop2DAcoIsoDenQ_DEO2_FDTD_AdjointBornAccumulation_wavefieldsep, wavefieldseparationlib), Cvoid,
-        (Ptr{Cvoid},Ptr{Cfloat},Ptr{Cfloat}),
-         prop.p,    dmodelv,    wavefieldp)
-end
-
+# const wavefieldseparationlib=normpath(joinpath(Base.source_path(),"../libprop2DAcoIsoDenQ_DEO2_FDTD"))
 # struct ImagingConditionWaveFieldSeparation <: ImagingCondition end
 # function adjointBornAccumulation!(prop::Prop2DAcoIsoDenQ_DEO2_FDTD,imagingcondition::ImagingConditionWaveFieldSeparation,dmodelv,wavefieldp)
-#     nz,nx = size(prop)
-#     nfft = 2 * nz
-#     nfft2 = div(nfft,2)
-#     scale = 1 / (float)(nfft)
-#     _B = B(prop)
-#     _V = V(prop)
-#     _POld = POld(prop)
-
-#     tmp_nlfup = zeros(ComplexF32,nfft,nx)
-#     tmp_nlfdn = zeros(ComplexF32,nfft,nx)
-#     tmp_adjup = zeros(ComplexF32,nfft,nx)
-#     tmp_adjdn = zeros(ComplexF32,nfft,nx)
-
-#     # tmp_nlfup[1:nz,:] .= scale .* wavefieldp
-#     # tmp_adjup[1:nz,:] .= scale .* _POld
-
-#     tmp_nlfup[1:nz,:] .= wavefieldp
-#     tmp_adjup[1:nz,:] .= _POld
-
-#     FFTW.set_num_threads(Sys.CPU_THREADS)
-#     plan_fft_forward = plan_fft!(tmp_nlfup, 1;flags=FFTW.MEASURE)
-
-#     mul!(tmp_nlfup, plan_fft_forward, tmp_nlfup)
-#     mul!(tmp_adjup, plan_fft_forward, tmp_adjup)
-
-#     tmp_nlfdn[nfft2:end,:] .= tmp_nlfup[nfft2:end,:]
-#     tmp_adjdn[nfft2:end,:] .= tmp_adjup[nfft2:end,:]
-
-#     tmp_nlfup[nfft2+1:end,:] .= 0
-#     tmp_adjup[nfft2+1:end,:] .= 0
-
-#     ldiv!(tmp_nlfdn, plan_fft_forward, tmp_nlfdn)
-#     ldiv!(tmp_adjdn, plan_fft_forward, tmp_adjdn)
-#     ldiv!(tmp_nlfup, plan_fft_forward, tmp_nlfup)
-#     ldiv!(tmp_adjup, plan_fft_forward, tmp_adjup)
-    
-#     @views @. dmodelv = (real(conj(tmp_nlfup[1:nz,:]) * tmp_adjup[1:nz,:]) + real(conj(tmp_nlfdn[1:nz,:]) * tmp_adjdn[1:nz,:])) * (2*_B/_V^3)
-#     nothing
+#     ccall((:Prop2DAcoIsoDenQ_DEO2_FDTD_AdjointBornAccumulation_wavefieldsep, wavefieldseparationlib), Cvoid,
+#         (Ptr{Cvoid},Ptr{Cfloat},Ptr{Cfloat}),
+#          prop.p,    dmodelv,    wavefieldp)
 # end
+
+struct ImagingConditionWaveFieldSeparation <: ImagingCondition end
+function adjointBornAccumulation!(prop::Prop2DAcoIsoDenQ_DEO2_FDTD,imagingcondition::ImagingConditionWaveFieldSeparation,dmodelv,wavefieldp)
+    nz,nx = size(prop)
+    nfft = 2 * nz
+    nfft2 = div(nfft,2)
+    _B = B(prop)
+    _V = V(prop)
+    _POld = POld(prop)
+
+    tmp_nlfup = zeros(ComplexF32,nfft,nx)
+    tmp_adjdn = zeros(ComplexF32,nfft,nx)
+
+    # tmp_nlfup[1:nz,:] .= scale .* wavefieldp
+    # tmp_adjup[1:nz,:] .= scale .* _POld
+
+    tmp_nlfup[1:nz,:] .= wavefieldp
+    tmp_adjdn[1:nz,:] .= _POld
+
+    FFTW.set_num_threads(Sys.CPU_THREADS)
+    plan_fft_forward = plan_fft!(tmp_nlfup, 1;flags=FFTW.MEASURE)
+    
+    mul!(tmp_nlfup, plan_fft_forward, tmp_nlfup)
+    mul!(tmp_adjdn, plan_fft_forward, tmp_adjdn)
+
+    tmp_nlfup[1:nfft2,:] .= 0
+    tmp_adjdn[nfft2+1:end,:] .= 0
+
+    ldiv!(tmp_nlfup, plan_fft_forward, tmp_nlfup)
+    ldiv!(tmp_adjdn, plan_fft_forward, tmp_adjdn)
+    
+    @views @. dmodelv = 2 * _B * real(tmp_nlfup[1:nz,:] * tmp_adjdn[1:nz,:]) /_V^3
+    nothing
+end
 
 function show(io::IO, prop::Prop2DAcoIsoDenQ_DEO2_FDTD)
     nx = ccall((:Prop2DAcoIsoDenQ_DEO2_FDTD_getNx, libprop2DAcoIsoDenQ_DEO2_FDTD), (Clong), (Ptr{Cvoid},), prop.p)
