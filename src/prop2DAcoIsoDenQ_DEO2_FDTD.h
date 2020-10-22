@@ -264,10 +264,10 @@ __attribute__((target_clones("avx","avx2","avx512f","default")))
     }
 
     inline void adjointBornAccumulation_wavefieldsep(float *dmodel, float *wavefieldDP) {
-        const long nfft = 2 * _nz;
+        const long nfft = _nz;
         const float scale = 1.0f / (float)(nfft);
 
-        std::complex<float> *tmp = new std::complex<float>[nfft];
+        std::complex<float> * __restrict__ tmp = new std::complex<float>[nfft];
 
         fftwf_plan planForward = fftwf_plan_dft_1d(nfft,
 		    reinterpret_cast<fftwf_complex*>(tmp),
@@ -281,10 +281,10 @@ __attribute__((target_clones("avx","avx2","avx512f","default")))
 
 #pragma omp parallel num_threads(_nthread)
         {
-            std::complex<float> *tmp_nlfup = new std::complex<float>[nfft];
-            std::complex<float> *tmp_adjdn = new std::complex<float>[nfft];
+            std::complex<float> * __restrict__ tmp_nlfup = new std::complex<float>[nfft];
+            std::complex<float> * __restrict__ tmp_adjdn = new std::complex<float>[nfft];
 
-#pragma omp for schedule(static,1)
+#pragma omp for schedule(static)
             for (long bx = 0; bx < _nx; bx += _nbx) {
                 const long kxmax = MIN(bx + _nbx, _nx);
                 for (long kx = bx; kx < kxmax; kx++) {
@@ -312,14 +312,14 @@ __attribute__((target_clones("avx","avx2","avx512f","default")))
                     // upgoing is negative frequencies, [-Nyquist,0]
                     // zero the positive frequencies, excluding Nyquist
         #pragma omp simd
-                    for (long kfft = 0; kfft < nfft / 2; kfft++) {
+                    for (long kfft = 0; kfft < nfft / 2 + 1; kfft++) {
                         tmp_nlfup[kfft] = 0;
                     }
 
                     // dngoing is positive frequencies, [0,+Nyquist]
                     // zero the negative frequencies, excluding Nyquist
         #pragma omp simd
-                    for (long kfft = nfft / 2 + 1; kfft < nfft; kfft++) {
+                    for (long kfft = nfft / 2; kfft < nfft; kfft++) {
                         tmp_adjdn[kfft] = 0;
                     }
 
@@ -338,7 +338,7 @@ __attribute__((target_clones("avx","avx2","avx512f","default")))
                         const float B = _b[k];
                         
                         // Faqi eq 10, as applied to FWI instead of RTM
-                        dmodel[k] += real(2 * B * tmp_nlfup[kz] * tmp_adjdn[kz] / pow(V, 3.0f));
+                        dmodel[k] += 2 * B * real(tmp_nlfup[kz] * tmp_adjdn[kz]) / pow(V, 3.0f);
                     }
                 }
             } // end loop over traces
