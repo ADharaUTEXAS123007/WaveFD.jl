@@ -264,7 +264,7 @@ __attribute__((target_clones("avx","avx2","avx512f","default")))
     }
 
     inline void adjointBornAccumulation_wavefieldsep(float *dmodel, float *wavefieldDP) {
-        const long nfft = _nz;
+        const long nfft = 2 * _nz;
         const float scale = 1.0f / (float)(nfft);
 
         std::complex<float> * __restrict__ tmp = new std::complex<float>[nfft];
