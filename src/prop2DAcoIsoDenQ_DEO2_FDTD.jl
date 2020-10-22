@@ -82,8 +82,22 @@ end
 #          prop.p,    dmodelv,    wavefieldp)
 # end
 
+# abstract type ImagingCondition end
+# struct ImagingConditionStandard <: ImagingCondition end
+# function adjointBornAccumulation!(prop::Prop2DAcoIsoDenQ_DEO2_FDTD,
+#         imagingcondition::ImagingConditionStandard,dmodelv,wavefieldp)
+#     nz,nx = size(prop)
+#     _B = B(prop)
+#     _V = V(prop)
+#     _POld = POld(prop)
+
+#     @views @. dmodelv += 2 * _B * wavefieldp * _POld /_V^3
+#     nothing
+# end
+
 struct ImagingConditionWaveFieldSeparation <: ImagingCondition end
-function adjointBornAccumulation!(prop::Prop2DAcoIsoDenQ_DEO2_FDTD,imagingcondition::ImagingConditionWaveFieldSeparation,dmodelv,wavefieldp)
+function adjointBornAccumulation!(prop::Prop2DAcoIsoDenQ_DEO2_FDTD,
+    imagingcondition::ImagingConditionWaveFieldSeparation,dmodelv,wavefieldp)
     nz,nx = size(prop)
     nfft = 2 * nz
     nfft2 = div(nfft,2)
@@ -106,13 +120,13 @@ function adjointBornAccumulation!(prop::Prop2DAcoIsoDenQ_DEO2_FDTD,imagingcondit
     mul!(tmp_nlfup, plan_fft_forward, tmp_nlfup)
     mul!(tmp_adjdn, plan_fft_forward, tmp_adjdn)
 
-    tmp_nlfup[1:nfft2,:] .= 0
-    tmp_adjdn[nfft2+1:end,:] .= 0
+    tmp_nlfup[1:nfft2+1,:] .= 0
+    tmp_adjdn[nfft2:end,:] .= 0
 
     ldiv!(tmp_nlfup, plan_fft_forward, tmp_nlfup)
     ldiv!(tmp_adjdn, plan_fft_forward, tmp_adjdn)
     
-    @views @. dmodelv = 2 * _B * real(tmp_nlfup[1:nz,:] * tmp_adjdn[1:nz,:]) /_V^3
+    @views @. dmodelv += 2 * _B * real(tmp_nlfup[1:nz,:] * tmp_adjdn[1:nz,:]) /_V^3
     nothing
 end
 
