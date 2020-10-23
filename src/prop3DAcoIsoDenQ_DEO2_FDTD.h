@@ -343,11 +343,13 @@ __attribute__((target_clones("avx","avx2","avx512f","default")))
     /**
      * Apply Kz wavenumber filter for up/down wavefield seperation
      * Faqi, 2011, Geophysics https://library.seg.org/doi/full/10.1190/1.3533914
+     * 
+     * We handle the FWI and RTM imaging conditions with a condition inside the OMP loop
      */
 #if defined(__FUNCTION_CLONES__)
 __attribute__((target_clones("avx","avx2","avx512f","default")))
 #endif
-    inline void adjointBornAccumulation_wavefieldsep(float *dmodel, float *wavefieldDP) {
+    inline void adjointBornAccumulation_wavefieldsep(float *dmodel, float *wavefieldDP, const long isFWI) {
         const long nfft = 2 * _nz;
         const float scale = 1.0f / (float)(nfft);
 
@@ -363,11 +365,10 @@ __attribute__((target_clones("avx","avx2","avx512f","default")))
 
         delete [] tmp;
 
-
 #pragma omp parallel num_threads(_nthread)
         {
-            std::complex<float> * __restrict__ tmp_nlfup = new std::complex<float>[nfft];
-            std::complex<float> * __restrict__ tmp_adjdn = new std::complex<float>[nfft];
+            std::complex<float> * __restrict__ tmp_nlf = new std::complex<float>[nfft];
+            std::complex<float> * __restrict__ tmp_adj = new std::complex<float>[nfft];
 
 #pragma omp for schedule(static)
             for (long bx = 0; bx < _nx; bx += _nbx) {
@@ -380,62 +381,61 @@ __attribute__((target_clones("avx","avx2","avx512f","default")))
 
 #pragma omp simd
                             for (long kfft = 0; kfft < nfft; kfft++) {
-                                tmp_nlfup[kfft] = 0;
-                                tmp_adjdn[kfft] = 0;
+                                tmp_nlf[kfft] = 0;
+                                tmp_adj[kfft] = 0;
                             }  
 
 #pragma omp simd
                             for (long kz = 0; kz < _nz; kz++) {
                                 const long k = kx * _ny * _nz + ky * _nz + kz;
-                                tmp_nlfup[kz] = scale * wavefieldDP[k];
-                                tmp_adjdn[kz] = scale * _pOld[k];
+                                tmp_nlf[kz] = scale * wavefieldDP[k];
+                                tmp_adj[kz] = scale * _pOld[k];
                             }  
 
                             fftwf_execute_dft(planForward,
-                                reinterpret_cast<fftwf_complex*>(tmp_nlfup),
-                                reinterpret_cast<fftwf_complex*>(tmp_nlfup));
+                                reinterpret_cast<fftwf_complex*>(tmp_nlf),
+                                reinterpret_cast<fftwf_complex*>(tmp_nlf));
 
                             fftwf_execute_dft(planForward,
-                                reinterpret_cast<fftwf_complex*>(tmp_adjdn),
-                                reinterpret_cast<fftwf_complex*>(tmp_adjdn));
+                                reinterpret_cast<fftwf_complex*>(tmp_adj),
+                                reinterpret_cast<fftwf_complex*>(tmp_adj));
 
-                            // upgoing is negative frequencies, [-Nyquist,0]
-                            // zero the positive frequencies, excluding Nyquist
-        #pragma omp simd
-                            for (long kfft = 0; kfft < nfft / 2 + 1; kfft++) {
-                                tmp_nlfup[kfft] = 0;
-                            }
-
-                            // dngoing is positive frequencies, [0,+Nyquist]
-                            // zero the negative frequencies, excluding Nyquist
-        #pragma omp simd
-                            for (long kfft = nfft / 2; kfft < nfft; kfft++) {
-                                tmp_adjdn[kfft] = 0;
+                            // upgoing: zero the positive frequencies, excluding Nyquist
+                            // dngoing: zero the negative frequencies, excluding Nyquist
+                            // FWI: adj wavefield is dngoing
+                            // RTM: adj wavefield is upgoing
+                            const long kfft_adj = (isFWI) ? nfft / 2 : 0;
+#pragma omp simd
+                            for (long k = 1; k < nfft / 2; k++) {
+                                tmp_nlf[nfft / 2 + k] = 0;
+                                tmp_adj[kfft_adj + k] = 0;
                             }
 
                             fftwf_execute_dft(planInverse,
-                                reinterpret_cast<fftwf_complex*>(tmp_nlfup),
-                                reinterpret_cast<fftwf_complex*>(tmp_nlfup));
+                                reinterpret_cast<fftwf_complex*>(tmp_nlf),
+                                reinterpret_cast<fftwf_complex*>(tmp_nlf));
 
                             fftwf_execute_dft(planInverse,
-                                reinterpret_cast<fftwf_complex*>(tmp_adjdn),
-                                reinterpret_cast<fftwf_complex*>(tmp_adjdn));
+                                reinterpret_cast<fftwf_complex*>(tmp_adj),
+                                reinterpret_cast<fftwf_complex*>(tmp_adj));
 
                             for (long kz = 0; kz < _nz; kz++) {
                                 const long k = kx * _ny * _nz + ky * _nz + kz;
                                 const float V = _v[k];
                                 const float B = _b[k];
 
-                                // Faqi eq 10, as applied to FWI instead of RTM
-                                dmodel[k] += 2 * B * real(tmp_nlfup[kz] * tmp_adjdn[kz]) / pow(V, 3.0f);
+                                // Faqi eq 10
+                                // Applied to FWI: [Sup * Rdn]
+                                // Applied to RTM: [Sup * Rup]
+                                dmodel[k] += 2 * B * real(tmp_nlf[kz] * tmp_adj[kz]) / pow(V, 3.0f);
                             }
                         } // end loop over ky
                     } // end loop over kx
                 } // end loop over by
             } // end loop over bx
             
-            delete [] tmp_nlfup;
-            delete [] tmp_adjdn;
+            delete [] tmp_nlf;
+            delete [] tmp_adj;
         } // end parallel region
     }
 

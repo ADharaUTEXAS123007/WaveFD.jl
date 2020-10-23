@@ -17,7 +17,19 @@ add_library(prop3DAcoTTIDenQ_DEO2_FDTD prop3DAcoTTIDenQ_DEO2_FDTD.cc)
 add_library(illumination illumination.c)
 add_library(spacetime spacetime.cc)
 
-set(CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH} "PREFIX/findFFTW")
+find_package(Git)
+
+if(NOT EXISTS findFFTW)
+    execute_process(COMMAND ${GIT_EXECUTABLE} clone https://github.com/egpbos/findfftw.git findFFTW
+        WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
+        RESULT_VARIABLE GIT_FFTW_RESULT)
+    if(NOT GIT_FFTW_RESULT EQUAL "0")
+        message(FATAL_ERROR "git clone https://github.com/egpbos/findfftw.git findFFTW --init failed with ${GIT_FFTW_RESULT}")
+    endif()
+endif()
+
+# git clone https://github.com/egpbos/findfftw.git findFFTW
+set(CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH} "findFFTW")
 find_package(FFTW)
 if(FFTW_FOUND)
     target_link_libraries(prop2DAcoIsoDenQ_DEO2_FDTD PUBLIC FFTW::Float)
@@ -29,6 +41,9 @@ if(FFTW_FOUND)
 endif()
 
 find_package(OpenMP)
+if(OpenMP_CXX_FOUND)
+  message("OpenMP found: ${OpenMP_CXX_FOUND}")
+endif()
 if(OpenMP_CXX_FOUND)
     target_link_libraries(prop2DAcoIsoDenQ_DEO2_FDTD PUBLIC OpenMP::OpenMP_CXX)
     target_link_libraries(prop2DAcoVTIDenQ_DEO2_FDTD PUBLIC OpenMP::OpenMP_CXX)
