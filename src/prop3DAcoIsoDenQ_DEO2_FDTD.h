@@ -421,7 +421,6 @@ __attribute__((target_clones("avx","avx2","avx512f","default")))
                                 reinterpret_cast<fftwf_complex*>(tmp_adjdn),
                                 reinterpret_cast<fftwf_complex*>(tmp_adjdn));
 
-
                             for (long kz = 0; kz < _nz; kz++) {
                                 const long k = kx * _ny * _nz + ky * _nz + kz;
                                 const float V = _v[k];
@@ -437,7 +436,7 @@ __attribute__((target_clones("avx","avx2","avx512f","default")))
             
             delete [] tmp_nlfup;
             delete [] tmp_adjdn;
-git        } // end parallel region
+        } // end parallel region
     }
 
     template<class Type>
