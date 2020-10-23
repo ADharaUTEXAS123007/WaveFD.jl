@@ -345,6 +345,12 @@ __attribute__((target_clones("avx","avx2","avx512f","default")))
      * Faqi, 2011, Geophysics https://library.seg.org/doi/full/10.1190/1.3533914
      * 
      * We handle the FWI and RTM imaging conditions with a condition inside the OMP loop
+     * 
+     * Example Kz filtering with 8 samples 
+     * frequency | +0 | +1 | +2 | +3 |  N | -3 | -2 | -1 |
+     * original  |  0 |  1 |  2 |  3 |  4 |  5 |  6 |  7 |
+     * upgoing   |  0 |  X |  X |  X |  4 |  5 |  6 |  7 |
+     * dngoing   |  0 |  1 |  2 |  3 |  4 |  X |  X |  X |
      */
 #if defined(__FUNCTION_CLONES__)
 __attribute__((target_clones("avx","avx2","avx512f","default")))
@@ -355,7 +361,7 @@ __attribute__((target_clones("avx","avx2","avx512f","default")))
 
         // FWI: adj wavefield is dngoing
         // RTM: adj wavefield is upgoing
-        const long kfft_adj = (isFWI) ? nfft / 2 : 0;
+        const long kfft_adj = (isFWI) ? 0 : nfft / 2;
 
         std::complex<float> * __restrict__ tmp = new std::complex<float>[nfft];
 

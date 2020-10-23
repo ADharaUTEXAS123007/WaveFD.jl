@@ -284,7 +284,7 @@ __attribute__((target_clones("avx","avx2","avx512f","default")))
 
         // FWI: adj wavefield is dngoing
         // RTM: adj wavefield is upgoing
-        const long kfft_adj = (isFWI) ? nfft / 2 : 0;
+        const long kfft_adj = (isFWI) ? 0 : nfft / 2;
 
         std::complex<float> * __restrict__ tmp = new std::complex<float>[nfft];
 

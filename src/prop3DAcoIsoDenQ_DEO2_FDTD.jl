@@ -71,10 +71,24 @@ function forwardBornInjection!(prop::Prop3DAcoIsoDenQ_DEO2_FDTD,dmodelv,wavefiel
          prop.p,    dmodelv,    wavefieldp)
 end
 
-function adjointBornAccumulation!(prop::Prop3DAcoIsoDenQ_DEO2_FDTD,dmodelv,wavefieldp)
+function adjointBornAccumulation!(prop::Prop3DAcoIsoDenQ_DEO2_FDTD,imagingcondition::ImagingConditionStandard,dmodelv,wavefieldp)
     ccall((:Prop3DAcoIsoDenQ_DEO2_FDTD_AdjointBornAccumulation, libprop3DAcoIsoDenQ_DEO2_FDTD), Cvoid,
         (Ptr{Cvoid},Ptr{Cfloat},Ptr{Cfloat}),
          prop.p,    dmodelv,    wavefieldp)
+end
+
+const wavefieldseparationlib_iso3d = normpath(joinpath(Base.source_path(),"../libprop3DAcoIsoDenQ_DEO2_FDTD"))
+
+function adjointBornAccumulation!(prop::Prop3DAcoIsoDenQ_DEO2_FDTD,imagingcondition::ImagingConditionWaveFieldSeparationFWI,dmodelv,wavefieldp)
+    ccall((:Prop3DAcoIsoDenQ_DEO2_FDTD_AdjointBornAccumulation_wavefieldsep, wavefieldseparationlib_iso3d), Cvoid,
+        (Ptr{Cvoid},Ptr{Cfloat},Ptr{Cfloat},Clong),
+         prop.p,    dmodelv,    wavefieldp,  1)
+end
+
+function adjointBornAccumulation!(prop::Prop3DAcoIsoDenQ_DEO2_FDTD,imagingcondition::ImagingConditionWaveFieldSeparationRTM,dmodelv,wavefieldp)
+    ccall((:Prop3DAcoIsoDenQ_DEO2_FDTD_AdjointBornAccumulation_wavefieldsep, wavefieldseparationlib_iso3d), Cvoid,
+        (Ptr{Cvoid},Ptr{Cfloat},Ptr{Cfloat},Clong),
+         prop.p,    dmodelv,    wavefieldp,  0)
 end
 
 function show(io::IO, prop::Prop3DAcoIsoDenQ_DEO2_FDTD)

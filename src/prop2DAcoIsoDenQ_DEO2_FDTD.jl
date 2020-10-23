@@ -49,7 +49,7 @@ function size(prop::Prop2DAcoIsoDenQ_DEO2_FDTD)
     (nz,nx)
 end
 
-for _f in (:V, :B, :PSpace, :MSpace, :PCur, :POld, :TmpPx, :TmpPz, :DtOmegaInvQ)
+for _f in (:V, :B, :PSpace, :PCur, :POld, :TmpPx, :TmpPz, :DtOmegaInvQ)
     symf = "Prop2DAcoIsoDenQ_DEO2_FDTD_get" * string(_f)
     @eval $(_f)(prop::Prop2DAcoIsoDenQ_DEO2_FDTD) = unsafe_wrap(Array, ccall(($symf, libprop2DAcoIsoDenQ_DEO2_FDTD), Ptr{Float32}, (Ptr{Cvoid},), prop.p), size(prop), own=false)
 end
@@ -66,25 +66,22 @@ function forwardBornInjection!(prop::Prop2DAcoIsoDenQ_DEO2_FDTD,dmodelv,wavefiel
          prop.p,    dmodelv,    wavefieldp)
 end
 
-abstract type ImagingCondition end
-struct ImagingConditionStandard <: ImagingCondition end
 function adjointBornAccumulation!(prop::Prop2DAcoIsoDenQ_DEO2_FDTD,imagingcondition::ImagingConditionStandard,dmodelv,wavefieldp)
     ccall((:Prop2DAcoIsoDenQ_DEO2_FDTD_AdjointBornAccumulation, libprop2DAcoIsoDenQ_DEO2_FDTD), Cvoid,
         (Ptr{Cvoid},Ptr{Cfloat},Ptr{Cfloat}),
          prop.p,    dmodelv,    wavefieldp)
 end
 
-const wavefieldseparationlib=normpath(joinpath(Base.source_path(),"../libprop2DAcoIsoDenQ_DEO2_FDTD"))
-struct ImagingConditionWaveFieldSeparationFWI <: ImagingCondition end
+const wavefieldseparationlib_iso2d = normpath(joinpath(Base.source_path(),"../libprop2DAcoIsoDenQ_DEO2_FDTD"))
+
 function adjointBornAccumulation!(prop::Prop2DAcoIsoDenQ_DEO2_FDTD,imagingcondition::ImagingConditionWaveFieldSeparationFWI,dmodelv,wavefieldp)
-    ccall((:Prop2DAcoIsoDenQ_DEO2_FDTD_AdjointBornAccumulation_wavefieldsep, wavefieldseparationlib), Cvoid,
+    ccall((:Prop2DAcoIsoDenQ_DEO2_FDTD_AdjointBornAccumulation_wavefieldsep, wavefieldseparationlib_iso2d), Cvoid,
         (Ptr{Cvoid},Ptr{Cfloat},Ptr{Cfloat},Clong),
          prop.p,    dmodelv,    wavefieldp,  1)
 end
 
-struct ImagingConditionWaveFieldSeparationRTM <: ImagingCondition end
 function adjointBornAccumulation!(prop::Prop2DAcoIsoDenQ_DEO2_FDTD,imagingcondition::ImagingConditionWaveFieldSeparationRTM,dmodelv,wavefieldp)
-    ccall((:Prop2DAcoIsoDenQ_DEO2_FDTD_AdjointBornAccumulation_wavefieldsep, wavefieldseparationlib), Cvoid,
+    ccall((:Prop2DAcoIsoDenQ_DEO2_FDTD_AdjointBornAccumulation_wavefieldsep, wavefieldseparationlib_iso2d), Cvoid,
         (Ptr{Cvoid},Ptr{Cfloat},Ptr{Cfloat},Clong),
          prop.p,    dmodelv,    wavefieldp,  0)
 end
