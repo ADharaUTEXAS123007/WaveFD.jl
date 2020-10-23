@@ -304,8 +304,9 @@ __attribute__((target_clones("avx","avx2","avx512f","default")))
 
 #pragma omp simd
                     for (long kz = 0; kz < _nz; kz++) {
-                        tmp_nlfup[kz] = scale * wavefieldDP[kx * _nz + kz];
-                        tmp_adjdn[kz] = scale * _pOld[kx * _nz + kz];
+                        const long k = kx * _nz + kz;
+                        tmp_nlfup[kz] = scale * wavefieldDP[k];
+                        tmp_adjdn[kz] = scale * _pOld[k];
                     }  
 
                     fftwf_execute_dft(planForward,
@@ -347,8 +348,8 @@ __attribute__((target_clones("avx","avx2","avx512f","default")))
                         // Faqi eq 10, as applied to FWI instead of RTM
                         dmodel[k] += 2 * B * real(tmp_nlfup[kz] * tmp_adjdn[kz]) / pow(V, 3.0f);
                     }
-                }
-            } // end loop over traces
+                } // end loop over kx
+            } // end loop over bx
 
             delete [] tmp_nlfup;
             delete [] tmp_adjdn;

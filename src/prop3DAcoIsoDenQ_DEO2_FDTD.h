@@ -374,22 +374,70 @@ __attribute__((target_clones("avx","avx2","avx512f","default")))
                 for (long by = 0; by < _ny; by += _nby) {
                     const long kxmax = MIN(bx + _nbx, _nx);
                     const long kymax = MIN(by + _nby, _ny);
-                    const long kzmax = MIN(bz + _nbz, _nz);
 
                     for (long kx = bx; kx < kxmax; kx++) {
                         for (long ky = by; ky < kymax; ky++) {
+
 #pragma omp simd
-                            for (long kz = bz; kz < kzmax; kz++) {
+                            for (long kfft = 0; kfft < nfft; kfft++) {
+                                tmp_nlfup[kfft] = 0;
+                                tmp_adjdn[kfft] = 0;
+                            }  
+
+#pragma omp simd
+                            for (long kz = 0; kz < _nz; kz++) {
+                                const long k = kx * _ny * _nz + ky * _nz + kz;
+                                tmp_nlfup[kz] = scale * wavefieldDP[k];
+                                tmp_adjdn[kz] = scale * _pOld[k];
+                            }  
+
+                            fftwf_execute_dft(planForward,
+                                reinterpret_cast<fftwf_complex*>(tmp_nlfup),
+                                reinterpret_cast<fftwf_complex*>(tmp_nlfup));
+
+                            fftwf_execute_dft(planForward,
+                                reinterpret_cast<fftwf_complex*>(tmp_adjdn),
+                                reinterpret_cast<fftwf_complex*>(tmp_adjdn));
+
+                            // upgoing is negative frequencies, [-Nyquist,0]
+                            // zero the positive frequencies, excluding Nyquist
+        #pragma omp simd
+                            for (long kfft = 0; kfft < nfft / 2 + 1; kfft++) {
+                                tmp_nlfup[kfft] = 0;
+                            }
+
+                            // dngoing is positive frequencies, [0,+Nyquist]
+                            // zero the negative frequencies, excluding Nyquist
+        #pragma omp simd
+                            for (long kfft = nfft / 2; kfft < nfft; kfft++) {
+                                tmp_adjdn[kfft] = 0;
+                            }
+
+                            fftwf_execute_dft(planInverse,
+                                reinterpret_cast<fftwf_complex*>(tmp_nlfup),
+                                reinterpret_cast<fftwf_complex*>(tmp_nlfup));
+
+                            fftwf_execute_dft(planInverse,
+                                reinterpret_cast<fftwf_complex*>(tmp_adjdn),
+                                reinterpret_cast<fftwf_complex*>(tmp_adjdn));
+
+
+                            for (long kz = 0; kz < _nz; kz++) {
                                 const long k = kx * _ny * _nz + ky * _nz + kz;
                                 const float V = _v[k];
                                 const float B = _b[k];
-                                dmodel[k] += (2 * B * wavefieldDP[k] * _pOld[k]) / pow(V, 3.0f);
+
+                                // Faqi eq 10, as applied to FWI instead of RTM
+                                dmodel[k] += 2 * B * real(tmp_nlfup[kz] * tmp_adjdn[kz]) / pow(V, 3.0f);
                             }
-                        }
-                    }
-                }
-            }
-        }
+                        } // end loop over ky
+                    } // end loop over kx
+                } // end loop over by
+            } // end loop over bx
+            
+            delete [] tmp_nlfup;
+            delete [] tmp_adjdn;
+git        } // end parallel region
     }
 
     template<class Type>
