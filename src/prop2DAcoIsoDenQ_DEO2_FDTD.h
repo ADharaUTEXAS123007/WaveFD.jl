@@ -263,6 +263,13 @@ __attribute__((target_clones("avx","avx2","avx512f","default")))
         }
     }
 
+    /**
+     * Apply Kz wavenumber filter for up/down wavefield seperation
+     * Faqi, 2011, Geophysics https://library.seg.org/doi/full/10.1190/1.3533914
+     */
+#if defined(__FUNCTION_CLONES__)
+__attribute__((target_clones("avx","avx2","avx512f","default")))
+#endif
     inline void adjointBornAccumulation_wavefieldsep(float *dmodel, float *wavefieldDP) {
         const long nfft = 2 * _nz;
         const float scale = 1.0f / (float)(nfft);
@@ -289,13 +296,13 @@ __attribute__((target_clones("avx","avx2","avx512f","default")))
                 const long kxmax = MIN(bx + _nbx, _nx);
                 for (long kx = bx; kx < kxmax; kx++) {
 
-    #pragma omp simd
+#pragma omp simd
                     for (long kfft = 0; kfft < nfft; kfft++) {
                         tmp_nlfup[kfft] = 0;
                         tmp_adjdn[kfft] = 0;
                     }  
 
-    #pragma omp simd
+#pragma omp simd
                     for (long kz = 0; kz < _nz; kz++) {
                         tmp_nlfup[kz] = scale * wavefieldDP[kx * _nz + kz];
                         tmp_adjdn[kz] = scale * _pOld[kx * _nz + kz];
@@ -311,14 +318,14 @@ __attribute__((target_clones("avx","avx2","avx512f","default")))
 
                     // upgoing is negative frequencies, [-Nyquist,0]
                     // zero the positive frequencies, excluding Nyquist
-        #pragma omp simd
+#pragma omp simd
                     for (long kfft = 0; kfft < nfft / 2 + 1; kfft++) {
                         tmp_nlfup[kfft] = 0;
                     }
 
                     // dngoing is positive frequencies, [0,+Nyquist]
                     // zero the negative frequencies, excluding Nyquist
-        #pragma omp simd
+#pragma omp simd
                     for (long kfft = nfft / 2; kfft < nfft; kfft++) {
                         tmp_adjdn[kfft] = 0;
                     }
@@ -331,7 +338,7 @@ __attribute__((target_clones("avx","avx2","avx512f","default")))
                         reinterpret_cast<fftwf_complex*>(tmp_adjdn),
                         reinterpret_cast<fftwf_complex*>(tmp_adjdn));
 
-        #pragma omp simd
+#pragma omp simd
                     for (long kz = 0; kz < _nz; kz++) {
                         const long k = kx * _nz + kz;
                         const float V = _v[k];
