@@ -28,7 +28,6 @@ if(NOT EXISTS findFFTW)
     endif()
 endif()
 
-# git clone https://github.com/egpbos/findfftw.git findFFTW
 set(CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH} "findFFTW")
 find_package(FFTW)
 if(FFTW_FOUND)

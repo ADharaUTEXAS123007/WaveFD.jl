@@ -78,14 +78,14 @@ const wavefieldseparationlib=normpath(joinpath(Base.source_path(),"../libprop2DA
 struct ImagingConditionWaveFieldSeparationFWI <: ImagingCondition end
 function adjointBornAccumulation!(prop::Prop2DAcoIsoDenQ_DEO2_FDTD,imagingcondition::ImagingConditionWaveFieldSeparationFWI,dmodelv,wavefieldp)
     ccall((:Prop2DAcoIsoDenQ_DEO2_FDTD_AdjointBornAccumulation_wavefieldsep, wavefieldseparationlib), Cvoid,
-        (Ptr{Cvoid},Ptr{Cfloat},Ptr{Cfloat}),Clong,
+        (Ptr{Cvoid},Ptr{Cfloat},Ptr{Cfloat},Clong),
          prop.p,    dmodelv,    wavefieldp,  1)
 end
 
 struct ImagingConditionWaveFieldSeparationRTM <: ImagingCondition end
 function adjointBornAccumulation!(prop::Prop2DAcoIsoDenQ_DEO2_FDTD,imagingcondition::ImagingConditionWaveFieldSeparationRTM,dmodelv,wavefieldp)
     ccall((:Prop2DAcoIsoDenQ_DEO2_FDTD_AdjointBornAccumulation_wavefieldsep, wavefieldseparationlib), Cvoid,
-        (Ptr{Cvoid},Ptr{Cfloat},Ptr{Cfloat}),Clong,
+        (Ptr{Cvoid},Ptr{Cfloat},Ptr{Cfloat},Clong),
          prop.p,    dmodelv,    wavefieldp,  0)
 end
 

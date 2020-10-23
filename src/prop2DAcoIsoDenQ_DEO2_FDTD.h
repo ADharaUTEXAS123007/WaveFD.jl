@@ -282,6 +282,10 @@ __attribute__((target_clones("avx","avx2","avx512f","default")))
         const long nfft = 2 * _nz;
         const float scale = 1.0f / (float)(nfft);
 
+        // FWI: adj wavefield is dngoing
+        // RTM: adj wavefield is upgoing
+        const long kfft_adj = (isFWI) ? nfft / 2 : 0;
+
         std::complex<float> * __restrict__ tmp = new std::complex<float>[nfft];
 
         fftwf_plan planForward = fftwf_plan_dft_1d(nfft,
@@ -327,9 +331,6 @@ __attribute__((target_clones("avx","avx2","avx512f","default")))
 
                     // upgoing: zero the positive frequencies, excluding Nyquist
                     // dngoing: zero the negative frequencies, excluding Nyquist
-                    // FWI: adj wavefield is dngoing
-                    // RTM: adj wavefield is upgoing
-                    const long kfft_adj = (isFWI) ? nfft / 2 : 0;
 #pragma omp simd
                     for (long k = 1; k < nfft / 2; k++) {
                         tmp_nlf[nfft / 2 + k] = 0;
