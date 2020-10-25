@@ -365,6 +365,21 @@ __attribute__((target_clones("avx","avx2","avx512f","default")))
 
         fftwf_destroy_plan(planForward);
         fftwf_destroy_plan(planInverse);
+
+        // {
+        //     double rmsw = 0;
+        //     double rmsp = 0;
+        //     double rmsd = 0;
+        //     for (long kx = 0; kx < _nx; kx++) {
+        //         for (long kz = 0; kz < _nz; kz++) {
+        //             const long k = kx * _nz + kz;
+        //             rmsw += wavefieldDP[k] * wavefieldDP[k];
+        //             rmsp += _pOld[k] * _pOld[k];
+        //             rmsd += dmodel[k] * dmodel[k];
+        //         }  
+        //     }  
+        //     printf("B rms w,p,d; %12.6f %12.6f %12.6f\n", sqrt(rmsw), sqrt(rmsp), sqrt(rmsd));
+        // }
     }
 
 template<class Type>
